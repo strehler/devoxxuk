@@ -1,1 +1,1 @@
-# Deck for Lunaconf talk
+# Deck for DevoxxUK Mini-Lab
