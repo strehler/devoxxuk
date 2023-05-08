@@ -1,0 +1,620 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+  <!-- TITLE OF THE PRESENTATION -->
+  <!-- ============================================================ -->
+  <title>
+    Write You An Actor (System) For Great Good!
+  </title>
+  <!-- ============================================================ -->
+
+  <!-- Set a favicon icon (usually the lab logo) -->
+  <link rel="shortcut icon" href="assets/icons8-danger-64.png">
+
+  <!-- Fonts -->
+  <link rel="stylesheet" href="fonts/fontawesome/css/all.css">
+  <link rel="stylesheet" href="fonts/computer-modern/fonts.css">
+
+  <!-- Reveal.js styles -->
+  <link rel="stylesheet" href="packages/revealjs/dist/reset.css">
+  <link rel="stylesheet" href="packages/revealjs/dist/reveal.css">
+  <link rel="stylesheet" href="packages/revealjs/dist/theme/simple.css" id="theme">
+
+  <!-- Theme used for syntax highlighting of code -->
+  <link rel="stylesheet" href="packages/revealjs/plugin/highlight/github-gist.css" id="highlight-theme">
+
+  <!-- Custom CSS for the presentation -->
+  <link rel="stylesheet/less" type="text/css" href="css/style.less">
+
+</head>
+
+<body>
+  <!-- Include the presentation from the content Markdown file -->
+  <div class="reveal">
+    <div class="slides">
+				<section data-markdown>
+					<textarea data-template>
+          ### Write You An Actor (System) For Great Good!
+          with JBang, JDK 19, records, pattern matching and virtual threads!
+
+          ```java
+            while (true) {
+                T m = mb.take();
+                Effect<T> effect = behavior.receive(m);
+                behavior = effect.transition(behavior);
+            }
+          ```
+					</textarea>
+        </section>
+
+        <section>
+          <div class="row">
+            <div class="col">
+            
+            <img style="width: 60%;" src="imgs/self.jpg">
+            
+            </div>
+            <div class="col tiny">
+              <h4>Andrea Peruffo</h3>  
+							<img style="width: 10%;" src="imgs/rh-logo.svg">
+              <p> @and_prf
+                  
+              <h4 style="margin-top:1em">Edoardo Vacchi</h3>
+							<img style="width: 20%;" src="imgs/tetrate-logo.svg">
+              <p> @evacchi
+            </div>
+            </div>
+        </section>
+
+				<section >
+					<img src="imgs/web.png" style="width: 60%;">
+
+					<p style="color: blue;"> evacchi.github.io
+				</section>				
+
+				<section>
+					<section data-markdown>
+						<textarea data-template>
+							### Agenda
+
+							- Java tooling - `jbang`
+							- Motivating example: Actors
+							- Java 17/19 features
+							- Tame the Actor API
+							- Actors Runtime (on Loom!)
+						</textarea>
+					</section>
+
+				</section>
+
+				<section>
+					<section data-markdown>
+						<textarea data-template>
+							### jbang
+
+							https://www.jbang.dev
+						</textarea>
+					</section>
+
+					<section data-markdown>
+						<textarea data-template>
+							### JBang
+
+							Unprecedented Java experience at your fingertips:
+
+							```bash
+							$ jbang init hello.java
+							$ ./hello.java
+							| [jbang] Building jar...
+							| Hello World
+							```
+						</textarea>
+					</section>
+
+					<section data-markdown="">
+						Java 19 to the rescue:
+
+						```
+						//JAVA 19
+						//JAVAC_OPTIONS --enable-preview --release 19
+						//JAVA_OPTIONS  --enable-preview
+						```
+					</section>
+
+					<section data-markdown>
+						<textarea data-template>
+						### JBang
+
+						```java
+						import static java.lang.System.*;
+
+						public class hello {
+							sealed interface ToGreet {};
+							record User(String name) implements ToGreet {};
+							record World() implements ToGreet {};
+					
+							public static void main(String... args) {
+								switch (args.length > 0 ? new User(args[0]) : new World()) {
+									case User(var name) -> out.println("Hello " + name);
+									case World w -> out.println("Hello World!");
+								}
+							}
+						}
+						```
+						</textarea>
+					</section>
+
+				</section>
+
+				<section>
+
+					<section data-markdown>
+						<textarea data-template>
+						### The Actor Model
+
+						- Concurrency Model
+						- Simple
+						- "Single-Thread" reasoning
+						- Message-based, "Mailbox"
+						</textarea>
+					</section>
+
+					<section data-markdown>
+						<textarea data-template>
+							### The Actor Model
+					
+							- Modelling stateful systems
+							- Distributed systems (e.g. leveraging location transparency)
+							- IoT (e.g. Digital twins)
+							- ...
+						</textarea>
+					</section>
+
+					<section data-markdown>
+						<textarea data-template>
+							
+							An [actor](https://en.wikipedia.org/wiki/Actor_model) is a **computational entity** that, 
+							*in response to a message* it receives, can concurrently:
+							
+							- **send** a finite number of messages to other actors;
+							- **create** a finite number of new actors;
+							- **designate the behavior** to be used for the next message it receives.
+
+							"Everything" is an actor.
+						</textarea>
+					</section>
+				</section>
+	
+				<!--  THE ISSUE: JDK PRE-17 WITH ACTORS SUCKS -->
+				<section>
+					<section data-markdown>
+						<textarea data-template>
+            ### Java + Akka Protocol
+
+            ```java
+						class Ping {
+							final int count;
+							ActorRef<Ping> replyTo;
+
+							Ping(int count, ActorRef<Ping> replyTo) {
+								this.count = count;
+								this.replyTo = replyTo;
+							}
+
+							int getCount() {
+								return count;
+							}
+
+							ActorRef<Ping> getReplyTo() {
+								return replyTo;
+							}
+						}
+            ```
+						</textarea>
+					</section>
+
+					<section data-markdown>
+						<textarea data-template>
+						### Java + Akka Implementation
+
+						```java
+						static class Pingponger extends AbstractActor {
+							@Override
+							public Receive createReceive() {
+								return receiveBuilder()
+									.match(
+										Ping.class,
+										ping -> {
+											out.println(getSelf().path() + " received ping, count down " + ping.getCount());
+											if (ping.getCount() > 0) { ping.getReplyTo().tell(new Ping(ping.getCount() - 1), getSelf()); }
+											else { System.exit(0); }
+										})
+									.build();
+							}
+						}
+
+						public static void main(String... args) {
+							ActorSystem system = ActorSystem.apply("pingpong");
+							ActorRef pinger = system.actorOf(Props.create(Pingponger.class), "pinger");
+							ActorRef ponger = system.actorOf(Props.create(Pingponger.class), "ponger");
+							pinger.tell(new Ping(10), ponger);
+						}
+						```
+						</textarea>
+					</section>
+
+					<section data-markdown>
+						<textarea data-template>
+								### Akka 
+								- clunky to write in pre-17:
+
+									- no concise way to express messages
+									- no tidy syntax to match against the types of the incoming messages
+									- no tidy way to represent closed type hierarchies		
+						</textarea>
+					</section>
+
+				</section>
+
+
+				<!-- JDK 17+ TO THE RESCUE -->
+				<section>
+					<!-- JAVA 19 FEATURES -->
+
+					<section data-markdown>
+						<textarea data-template>
+							### Java 17+
+						</textarea>
+					</section>
+
+					<section data-markdown>
+						<textarea data-template>
+							### Records
+
+							```
+							record User(String name) {}
+							```
+						</textarea>
+					</section>
+
+					<!-- SEALED TYPE HIERARCHIES -->
+					<section data-markdown>
+						<textarea data-template>
+							### Sealed Type Hierarchies
+
+							```
+							sealed interface GreetingTarget {};
+							record User(String name) implements GreetingTarget {};
+							record World() implements GreetingTarget {};
+							```
+						</textarea>
+					</section>
+
+					<!-- PATTERN MATCHING -->
+					<section data-markdown>
+						<textarea data-template>
+							### Pattern matching (JDK 17)
+
+							```
+							GreetingTarget tgt = ... 
+							switch (tgt) {
+								case World w -> out.println("Hello World");
+								case User u && u.name() == "..." -> out.println("Hello " + u.name());
+							}
+							```
+						</textarea>
+					</section>
+					<section data-markdown>
+						<textarea data-template>
+							### Pattern matching (JDK 19)
+
+							```
+							GreetingTarget tgt = ... 
+							switch (tgt) {
+								case World w -> out.println("Hello World");
+								case User(var name) when (name == "...") -> out.println("Hello " + name);
+							}
+							```
+						</textarea>
+					</section>
+				</section>	
+
+			<section>
+				<section data-markdown>
+					<textarea data-template>
+						### Actor API
+					</textarea>
+				</section>
+
+				<section data-markdown>
+					<textarea data-template>
+						### API
+
+						```java
+						public interface TypedActor {
+							interface Address<T> { Address<T> tell(T msg); }
+							interface Behavior<T> { Effect<T> receive(T o); }
+							interface Effect<T> { Behavior<T> transition(Behavior<T> next); }
+						}
+						```
+					</textarea>
+				</section>
+
+				<section data-markdown>
+					<textarea data-template>
+						### API
+
+						```java
+						public interface TypedActor {
+							interface Address<T> { Address<T> tell(T msg); }
+							interface Behavior<T> { Effect<T> receive(T o); }
+							interface Effect<T> { Behavior<T> transition(Behavior<T> next); }							
+					
+							static <T> Effect<T> Become(Behavior<T> next) { return current -> next; }
+							static <T> Effect<T> Stay() { return current -> current; }
+							static <T> Effect<T> Die() {
+								return Become(
+									msg -> {
+										out.println("Dropping msg [" + msg + "] due to severe case of death.");
+										return Stay();
+									}
+								);
+							}
+						}
+						```
+					</textarea>
+				</section>
+			</section>
+
+			<section>
+				<section data-markdown>
+					<textarea data-template>
+						Actors on Java 19
+
+						```java
+						sealed interface PingProtocol {};
+						record Ping(Address<PingProtocol> sender, Integer count) implements PingProtocol {};
+						record PoisonPill() implements PingProtocol {}; 
+				
+						static Effect<PingProtocol> pingerBehavior(Address<PingProtocol> self, PingProtocol msg) {
+							System.out.println("Received message: " + msg);
+							return switch (msg) {
+								case Ping(var sender, var count) when count > 0 -> {
+									sender.tell(new Ping(self, count - 1));
+									yield Stay();
+								}
+								case Ping p -> {
+									p.sender().tell(new PoisonPill());
+									yield Stay();
+								}
+								case PoisonPill d -> { yield Die(); }
+							};
+						}
+						static void main(String... args) {
+							var actorSystem = new TypedActor.System(Executors.newCachedThreadPool());
+							Address<PingProtocol> ponger = actorSystem.actorOf(self -> msg -> pingerBehavior(self, msg));
+							Address<PingProtocol> pinger = actorSystem.actorOf(self -> msg -> pingerBehavior(self, msg));
+							ponger.tell(new Ping(pinger, 10));
+						}					
+						```
+					</textarea>
+				</section>
+			</section>
+
+			<section>
+				<section data-markdown>
+					<textarea data-template>
+					### Actor Runtime
+					</textarea>
+				</section>
+
+				<section data-markdown>
+					<textarea data-template>
+						### Loom
+
+						https://wiki.openjdk.org/display/loom/Main
+
+						Project Loom is to intended to explore, incubate and deliver Java VM features and APIs built on top of them for the purpose of supporting easy-to-use, high-throughput lightweight concurrency and **new programming models** on the Java platform. 
+					</textarea>
+				</section>
+
+				<section data-markdown>
+					<textarea data-template>
+						### Loom - Concepts
+
+						- Virtual Threads (thousands!)
+						- `yield` in blocking std lib
+					</textarea>
+				</section>
+
+				<section data-markdown>
+					<textarea data-template>
+					Loom `actorOf`
+
+					```java
+					record System() {
+						private static ExecutorService executorService = Executors.newVirtualThreadPerTaskExecutor();
+		
+						public <T> Address<T> actorOf(Function<Address<T>, Behavior<T>> initial) {
+							var addr = new RunnableAddress<T>(initial, new LinkedBlockingQueue<>());
+							executorService.execute(addr);
+							return addr;
+						}
+					}
+					```
+					</textarea>
+				</section>
+
+				<section data-markdown>
+					<textarea data-template>
+					Loom `RunnableAddress`
+
+					```java
+					record RunnableAddress<T>(Function<Address<T>, Behavior<T>> initial, LinkedBlockingQueue<T> mailbox)
+							implements Address<T>, Runnable {
+
+						public Address<T> tell(T msg) {
+							mailbox.offer(msg);
+							return this;
+						}
+			
+						public void run() {
+							Behavior<T> behavior = initial.apply(this);
+							while (true) {
+								try {
+									T message = mailbox.take();
+									Effect<T> effect = behavior.receive(message);
+									behavior = effect.transition(behavior);
+								} catch (InterruptedException e) {
+									e.printStackTrace();
+									break;
+								}
+							}
+						}
+					}
+					```
+					</textarea>
+				</section>
+
+				<section data-markdown>
+					<textarea data-template>
+						### LIVE LOOM CHAT
+					</textarea>
+				</section>
+
+        <section data-markdown>
+					<textarea data-template>
+						<img style="width: 60%;" src="imgs/client-create.png">
+					</textarea>
+				</section>
+				<section data-markdown>
+					<textarea data-template>
+						<img style="width: 60%;" src="imgs/actor-lineread.png">
+					</textarea>
+				</section>
+
+			</section>
+
+      <section data-markdown>
+        <textarea data-template>
+          # Thanks!
+          <br/>
+          <a href="http://andreaperuffo.com/lunaconf_deck/">http://andreaperuffo.com/lunaconf_deck/</a>
+          <br/>
+          <a href="https://github.com/andreaTP/lunaconf_deck">https://github.com/andreaTP/lunaconf_deck</a>
+          <br/>
+          <br/>
+					Q&A
+        </textarea>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- Less to compile the style sheet to plain CSS -->
+  <script src="packages/less/less.min.js" type="text/javascript"></script>
+
+  <!-- Import the Reveal.js Javascript code -->
+  <script src="packages/revealjs/dist/reveal.js" type="text/javascript"></script>
+  <!-- Code for the plugins (also need to include them in Reveal.initialize) -->
+  <script src="packages/revealjs/plugin/math/math.js" type="text/javascript"></script>
+  <script src="packages/revealjs/plugin/markdown/markdown.js" type="text/javascript"></script>
+  <script src="packages/revealjs/plugin/highlight/highlight.js" type="text/javascript"></script>
+
+  <!-- Configure Reveal.js -->
+  <script>
+    Reveal.initialize({
+      katex: {
+        local: 'packages/katex',
+      },
+      plugins: [RevealMarkdown, RevealMath.KaTeX, RevealHighlight],
+      width: 1920,
+      height: 1080,
+      margin: 0.1,
+      // Bounds for smallest/largest possible scale to apply to content
+      minScale: 0.1,
+      maxScale: 2.0,
+      // Play videos automatically when displaying a slide
+      autoPlayMedia: true,
+      // Vertical centering of slides
+      center: true,
+      // Transition style
+      transition: 'none', // none/fade/slide/convex/concave/zoom
+      // Transition speed
+      transitionSpeed: 'default', // default/fast/slow
+      // Transition style for full page slide backgrounds
+      backgroundTransition: 'none', // none/fade/slide/convex/concave/zoom
+      // Display presentation control arrows
+      controls: true,
+      // Help the user learn the controls by providing hints, for example by
+      // bouncing the down arrow when they first encounter a vertical slide
+      controlsTutorial: true,
+      // Determines where controls appear, "edges" or "bottom-right"
+      controlsLayout: 'bottom-right',
+      // Visibility rule for backwards navigation arrows; "faded", "hidden"
+      // or "visible"
+      controlsBackArrows: 'faded',
+      // Display a presentation progress bar
+      progress: true,
+      // Display the page number of the current slide
+      // - "c/t":   Flattened slide number / total slides
+      slideNumber: "c/t",
+      // Add the current slide number to the URL hash so that reloading the
+      // page/copying the URL will return you to the same slide
+      hash: true,
+      // Flags if we should monitor the hash and change slides accordingly
+      respondToHashChanges: true,
+      // Turns fragments on and off globally
+      fragments: true,
+      // Flags whether to include the current fragment in the URL,
+      // so that reloading brings you to the same fragment position
+      fragmentInURL: true,
+      // Push each slide change to the browser history.  Implies `hash: true`
+      history: false,
+      // Enable keyboard shortcuts for navigation
+      keyboard: true,
+      // Enables touch navigation on devices with touch input
+      touch: true,
+      // Loop the presentation
+      loop: false,
+      // Changes the behavior of our navigation directions.
+      // "default"
+      // Left/right arrow keys step between horizontal slides, up/down
+      // arrow keys step between vertical slides. Space key steps through
+      // all slides (both horizontal and vertical).
+      // "linear"
+      // Removes the up/down arrows. Left/right arrows step through all
+      // slides (both horizontal and vertical).
+      // "grid"
+      // When this is enabled, stepping left/right from a vertical stack
+      // to an adjacent vertical stack will land you at the same vertical
+      // index.
+      navigationMode: 'linear',
+      // Flags if we should show a help overlay when the question-mark
+      // key is pressed
+      help: true,
+      // Flags if it should be possible to pause the presentation (blackout)
+      pause: false,
+      // Flags if speaker notes should be visible to all viewers
+      showNotes: false,
+      // Enable slide navigation via mouse wheel
+      mouseWheel: false,
+      // The maximum number of pages a single slide can expand onto when printing
+      // to PDF, unlimited by default (Number.POSITIVE_INFINITY)
+      pdfMaxPagesPerSlide: Number.POSITIVE_INFINITY,
+      // Prints each fragment on a separate slide
+      pdfSeparateFragments: true,
+      // Offset used to reduce the height of content within exported PDF pages.
+      // This exists to account for environment differences based on how you
+      // print to PDF. CLI printing options, like phantomjs and wkpdf, can end
+      // on precisely the total height of the document whereas in-browser
+      // printing has to end one pixel before.
+      pdfPageHeightOffset: -1,
+    });
+  </script>
+
+</body>
+</html>
