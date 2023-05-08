@@ -239,16 +239,16 @@
 								ActorSystem system = ActorSystem.apply("pingpong");
 								ActorRef pinger = system.actorOf(Props.create(Pingponger.class), "pinger");
 								ActorRef ponger = system.actorOf(Props.create(Pingponger.class), "ponger");
-								pinger.tell(new Ping(10), ponger);
+								pinger.tell(new Ping(10, ponger));
 							}
-							
+
 							public Receive createReceive() {
 								return receiveBuilder().match(
 									Ping.class, ping -> {
 										ActorRef<Ping> replyTo = ping.getReplyTo()
 										out.println(replyTo + " received ping, count down " + ping.getCount());
 										if (ping.getCount() > 0) { 
-											replyTo.tell(new Ping(ping.getCount() - 1), replyTo); 
+											replyTo.tell(new Ping(ping.getCount() - 1, replyTo)); 
 										} else { 
 											System.exit(0); 
 										}
@@ -369,14 +369,6 @@
 					
 							static <T> Effect<T> Become(Behavior<T> next) { return current -> next; }
 							static <T> Effect<T> Stay() { return current -> current; }
-							static <T> Effect<T> Die() {
-								return Become(
-									msg -> {
-										out.println("Dropping msg [" + msg + "] due to severe case of death.");
-										return Stay();
-									}
-								);
-							}
 						}
 						```
 					</textarea>
@@ -390,8 +382,7 @@
 
 						```java
 						sealed interface PingProtocol {};
-						record Ping(Address<PingProtocol> sender, Integer count) implements PingProtocol {};
-						record PoisonPill() implements PingProtocol {}; 
+						record Ping(Address<PingProtocol> sender, int count) implements PingProtocol {};
 				
 						static Effect<PingProtocol> pingerBehavior(Address<PingProtocol> self, PingProtocol msg) {
 							System.out.println("Received message: " + msg);
@@ -401,10 +392,8 @@
 									yield Stay();
 								}
 								case Ping p -> {
-									p.sender().tell(new PoisonPill());
 									yield Stay();
 								}
-								case PoisonPill d -> { yield Die(); }
 							};
 						}
 						static void main(String... args) {
