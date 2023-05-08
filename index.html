@@ -70,10 +70,9 @@
         </section>
 
 				<section >
-					<img src="imgs/web.png" style="width: 60%;">
-
+					<img src="imgs/web.png" style="width: 50%;">
 					<p style="color: blue;"> evacchi.github.io
-				</section>				
+					</section>				
 
 				<section>
 					<section data-markdown>
@@ -195,22 +194,36 @@
             ### Java + Akka Protocol
 
             ```java
-						class Ping {
-							final int count;
-							ActorRef<Ping> replyTo;
+						public class Ping {
+							private final int count;
+							private final ActorRef<Ping> replyTo;
+							...
+						}
+            ```
+						</textarea>
+					</section>
 
-							Ping(int count, ActorRef<Ping> replyTo) {
-								this.count = count;
-								this.replyTo = replyTo;
-							}
 
-							int getCount() {
-								return count;
-							}
+					<section data-markdown>
+						<textarea data-template>
+            ### Java + Akka Protocol
 
-							ActorRef<Ping> getReplyTo() {
-								return replyTo;
+            ```java
+						public class Ping {
+							private final int count;
+							private final ActorRef<Ping> replyTo;
+
+							// constructor
+							public Ping(int count_, ActorRef<Ping> replyTo_) { 
+								count = count_; replyTo_ = replyTo; 
 							}
+							
+							// getters
+							public int getCount() { return count; }
+							public ActorRef<Ping> getReplyTo() { return replyTo; }
+							
+							// equals, hashCode
+							...
 						}
             ```
 						</textarea>
@@ -221,27 +234,28 @@
 						### Java + Akka Implementation
 
 						```java
-						static class Pingponger extends AbstractActor {
-							@Override
+						public class Pingponger extends AbstractActor {
+							public static void main(String... args) {
+								ActorSystem system = ActorSystem.apply("pingpong");
+								ActorRef pinger = system.actorOf(Props.create(Pingponger.class), "pinger");
+								ActorRef ponger = system.actorOf(Props.create(Pingponger.class), "ponger");
+								pinger.tell(new Ping(10), ponger);
+							}
+							
 							public Receive createReceive() {
-								return receiveBuilder()
-									.match(
-										Ping.class,
-										ping -> {
-											out.println(getSelf().path() + " received ping, count down " + ping.getCount());
-											if (ping.getCount() > 0) { ping.getReplyTo().tell(new Ping(ping.getCount() - 1), getSelf()); }
-											else { System.exit(0); }
-										})
-									.build();
+								return receiveBuilder().match(
+									Ping.class, ping -> {
+										ActorRef<Ping> replyTo = ping.getReplyTo()
+										out.println(replyTo + " received ping, count down " + ping.getCount());
+										if (ping.getCount() > 0) { 
+											replyTo.tell(new Ping(ping.getCount() - 1), replyTo); 
+										} else { 
+											System.exit(0); 
+										}
+									}).build();
 							}
 						}
 
-						public static void main(String... args) {
-							ActorSystem system = ActorSystem.apply("pingpong");
-							ActorRef pinger = system.actorOf(Props.create(Pingponger.class), "pinger");
-							ActorRef ponger = system.actorOf(Props.create(Pingponger.class), "ponger");
-							pinger.tell(new Ping(10), ponger);
-						}
 						```
 						</textarea>
 					</section>
