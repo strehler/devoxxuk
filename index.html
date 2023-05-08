@@ -245,10 +245,10 @@
 							public Receive createReceive() {
 								return receiveBuilder().match(
 									Ping.class, ping -> {
-										ActorRef<Ping> replyTo = ping.getReplyTo()
+										ActorRef<Ping> replyTo = ping.getReplyTo();
 										out.println(replyTo + " received ping, count down " + ping.getCount());
 										if (ping.getCount() > 0) { 
-											replyTo.tell(new Ping(ping.getCount() - 1, replyTo)); 
+											replyTo.tell(new Ping(ping.getCount() - 1, getSelf()));
 										} else { 
 											System.exit(0); 
 										}
