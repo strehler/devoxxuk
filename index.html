@@ -69,16 +69,23 @@
             </div>
         </section>
 
+				<section>
+					<img src="imgs/frame.png" style="width: 50%;">
+					<p style="color: blue;">https://bit.ly/actor-devoxx<br>
+					<code>git clone github.com/strehler/devoxxuk</code>
+				</section>
+
 				<section >
 					<img src="imgs/web.png" style="width: 50%;">
 					<p style="color: blue;"> evacchi.github.io
-					</section>				
+				</section>
 
 				<section>
 					<section data-markdown>
 						<textarea data-template>
 							### Agenda
 
+							- Demo
 							- Java tooling - `jbang`
 							- Motivating example: Actors
 							- Java 17/19 features
@@ -86,7 +93,19 @@
 							- Actors Runtime (on Loom!)
 						</textarea>
 					</section>
+				</section>
 
+				<section>
+					<section data-markdown>
+						<textarea data-template>
+							### Tools
+
+							https://sdkman.io/
+
+							- jbang
+							- visualvm
+						</textarea>
+					</section>
 				</section>
 
 				<section>
@@ -95,6 +114,8 @@
 							### jbang
 
 							https://www.jbang.dev
+							
+							`sdk install jbang`
 						</textarea>
 					</section>
 
@@ -245,10 +266,10 @@
 							public Receive createReceive() {
 								return receiveBuilder().match(
 									Ping.class, ping -> {
-										ActorRef<Ping> replyTo = ping.getReplyTo()
+										ActorRef<Ping> replyTo = ping.getReplyTo();
 										out.println(replyTo + " received ping, count down " + ping.getCount());
 										if (ping.getCount() > 0) { 
-											replyTo.tell(new Ping(ping.getCount() - 1, replyTo)); 
+											replyTo.tell(new Ping(ping.getCount() - 1, getSelf()));
 										} else { 
 											System.exit(0); 
 										}
@@ -323,7 +344,7 @@
 					</section>
 					<section data-markdown>
 						<textarea data-template>
-							### Pattern matching (JDK 19)
+							### Pattern matching (JDK 19+)
 
 							```
 							GreetingTarget tgt = ... 
